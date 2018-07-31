@@ -1,4 +1,20 @@
-# The Phage Programming Language
+<div align="center">
+	<p>
+	   <img src="http://owenowen.netsoc.ie/res/phage.svg" height="150">
+	</p>
+	<h1>The Phage Programming Language</h1>
+	<a href="https://travis-ci.org/414owen/Phage">
+		<img
+			src="https://img.shields.io/travis/414owen/Phage.svg"
+			alt="Build Status Badge"
+		></img>
+	</a>
+	<img
+		src="https://img.shields.io/github/license/414owen/Phage.svg"
+		alt="Licence Badge"
+	></img>
+</div>
+
 
 Phage is a functional, syntactically pure, interpreted programming language.
 It aims to provide maximum expressivity, excellent support for metaprogramming,
@@ -8,10 +24,10 @@ and be 'hackable'.
 
 ### Redefine Everything
 
-Phage has no keywords (you can redefine `if`, `true`, and `def` if you want). This is
-because `if`, `true`, and `def` are normal variables.
+Phage has no keywords. If you want, you can redefine `if`, `true`, and `def`.
+This is because `if`, `true`, and `def` are normal bindings.
 
-```scheme
+```
 (def a 1)    // a becomes 1
 (def d def)  // d becomes def
 (d b 4)      // b becomes 4
@@ -19,41 +35,140 @@ because `if`, `true`, and `def` are normal variables.
 (def c 5)    // broken! you can't call 4!
 ```
 
-Because of this property, it's very easy to project your personal tastes onto phage. In fact, the core language defines variables `def`, `define` and `var` to do the exact same thing. There are also two other ways to define variables, that act differently, `fun`, and `let`.
+Because of this property, it's very easy to project your personal taste onto
+Phage. There are other ways to define bindings, which we'll cover later on.
 
 ### Immutability
 
-Data is immutable. When redefine variables, everything up to that point will
+Data is immutable. When we redefine variables, everything up to that point will
 maintain the old reference. Here is an example (notice that when we redefine
-`a`, `pr` mainrtains the old reference):
+`a`, `pr` maintains the old reference):
 
-```scheme
+```
 (def a 1)              // a becomes 1
 (print a)              // prints 1
-(fun pr () (print a))  // defines a function that prints a
+(fn pr () (print a))   // defines a function that prints a
 (def a 2)              // a becomes 2
 (print a)              // prints 2
 (pr)                   // prints 1
 ```
 
-This is different from variable shadowing, which only occurs on nested scopes. In Phage, functions are bound to their contexts (everything defined above them), and ignore definitions below, and in more nested scopes than them.
+This is different from variable shadowing, which only occurs on nested scopes.
+In Phage, functions are bound to their contexts (everything defined above
+them), and ignore bindings defined below, and in scopes more nested than them.
 
 ### Syntactic Purity
 
 * A program consists of many lists
-* Lists are evaluated by taking the first element (the `car`), which should be a function / special form, and applying the tail (the `cdr`) to it.
+* Lists are evaluated by taking the first element (the `car`), which should
+  be a function / special form, and applying the tail (the `cdr`) to it.
+
+### Homoiconicity
+
+As is common with languages that have lots of brackets, Phage is homoiconic.
+This means that Phage's Abstract Syntax Tree is the same as the textual layout
+of the language. The form `quote` allows you to convert program segments to
+data, and `eval` does the converse.
+
+```
+(def a (quote (+ 1 2 3)))  // (+ 1 2 3)
+a                          // (+ 1 2 3)
+(eval a)                   // 6
+(a)                        // error: (+ 1 2 3) is not a function
+(car a)                    // +
+(cdr a)                    // (1 2 3)
+```
+
+### Many types of evaluatables
+
+| Named   | Lambda   | Evaluates Args   | Scoping   | Creates Scope |
+| ------- | -------- | ---------------- | --------- | ------------- |
+| `fn`    | `\`      | yes              | lexical   | yes           |
+| `sfn`   | `s\`     | yes              | lexical   | no            |
+| `dfn`   | `d\`     | yes              | dynamic   | yes           |
+| `dsfn`  | `ds\`    | yes              | dynamic   | no            |
+| `fm`    | `\\`     | no               | lexical   | yes           |
+| `sfm`   | `s\\`    | no               | lexical   | no            |
+| `dfm`   | `d\\`    | no               | dynamic   | yes           |
+| `dsfm`  | `ds\\`   | no               | dynamic   | no            |
+
+#### Argument Evaluation
+
+Functions evaluate their arguments, forms don't. Forms take in the AST
+representation of their arguments. The simplest example of this is the `quote`
+function we saw above. It is defined as follows:
+
+```
+(def quote (\\(a) a))
+
+// or
+
+(fm quote (a) a)
+```
+
+#### Scoping
+
+Lexically scoped evaluatables use the context present when they were defined.
+Dynamically scoped evaluatables use the context of the caller.
+
+```
+(fn lex () a)
+(dfn dyn () a)
+(def a 3)
+(lex)          // error: variable 'a' not in scope
+(dyn)          // 3
+```
+
+#### Scope Creation
+
+Finally, some evaluatables create their own scope, whereas some use the
+surrounding scope. For the former, variable declarations are local to the body
+of the evaluatable, which is 'normal'.
+
+```
+((\ () (def a 3)))    // extra brackets used to perform call immediately
+((s\ () (def b 4)))   // this one doesn't create its own scope
+
+b     // 4
+a     // error: variable 'a' not in scope
+```
+
+#### Why is this Useful?
+
+Various combinations of the above evaluatables are necessary to abstract some
+special forms. For example, there is one inbuilt form, `def`, which adds an
+entry to the symbol table. In the prelude (written in Phage), there is a
+function `defs`, which adds multiple entries to the symbol table. It is defined
+and used as follows:
+
+```
+(dsfm defs () (map (apply def) args))
+
+(defs
+	(a 1)
+	(b (+ 1 1))
+	(c 3))
+
+a     // 1
+b     // 2
+c     // 3
+```
+
+The named evaluatable definers, `fn`, `fm`, `dsfm`, etc. are also defined in
+the prelude, using the above features. Only the lambda forms of each are written
+in Haskell.
 
 ## Usage
 
 ```bash
 $ stack build                    # to build
 $ stack exec phage               # run the repl
-$ stack exec phage -- <program>  # run a phage program
+$ stack exec phage -- <program>  # run a Phage program
 ```
 
 ## Examples
 
-```scheme
+```
 (import "prelude/prelude.scm")
 
 // ---
@@ -69,15 +184,15 @@ true            // Booleans
 // Function Application
 // ---
 
-(+ 1 2)        // 3
-(+ 1 2 3 4 5)  // 15
+(+ 1 2)       // 3
+(+ 1 2 3 4 5) // 15
 
 // ---
 // Function Definition
 // ---
 
 // `hello` takes two parameters, prints them, then returns their sum
-(fun hello (a b) (print a b) (+ a b))
+(fn hello (a b) (print a b) (+ a b))
 
 // Anonymous functions are created with `\`
 (\ (a b c) (+ a (- b c)))
@@ -94,10 +209,10 @@ true            // Booleans
 // ---
 
 // normal, recursive way
-(fun fact (a) (if (<= a 0) 1 (* a (fact (- a 1)))))
+(fn fact (a) (if (<= a 0) 1 (* a (fact (- a 1)))))
 
 // product of range
-(fun fact (a) (prod (upto a)))
+(fn fact (a) (prod (upto a)))
 
 // data pipe
 (def fact (pipe upto prod))
@@ -192,6 +307,17 @@ true            // Booleans
 
 // Of course, the better way to create the sum function is:
 (def sum (fold 0 +))
+
+// ---
+// List Comprehensions
+// ---
+
+// List comprehensions are defined in Phage, in `stdlib/comp.scm`.
+// There is no 'glue' syntax, like `[_ for _ in _]` or `[_ | _ <- |]`.
+// They also read left-to-right. Here are some examples:
+
+(comp (list 1 2 3) x x)                       // (1 2 3)
+(comp (list 1 2 3) x (list 4 5 6) y (* x y))  // (4 5 6 8 10 12 12 15 18)
 ```
 
 For more extensive examples, see my [tests](test/eq.scm), which are written in Phage.
